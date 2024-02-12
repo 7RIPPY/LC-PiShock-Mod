@@ -1,3 +1,3 @@
 # PiShock for Lethal Company
-PiShock integration for Lethal Company. By TRIPPYTRASH
+PiShock integration for Lethal Company.
 
