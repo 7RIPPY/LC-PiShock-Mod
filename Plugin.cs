@@ -5,44 +5,47 @@ using GameNetcodeStuff;
 using HarmonyLib;
 using PiShock.Patches;
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
 
 namespace PiShock
 {
     [BepInPlugin(modGUID, modName, modVersion)]
-    public class PiShock : BaseUnityPlugin
+    public class PiShockPlugin : BaseUnityPlugin
     {
         private const string modGUID = "PiShock";
         private const string modName = "PiShock";
-        private const string modVersion = "1.0.2";
+        private const string modVersion = "1.1.0";
 
         private readonly Harmony harmony = new Harmony("PiShock");
         internal readonly string pishockLogId = "PiShock (Lethal company)";
 
-        internal static PiShock Instance = null;
+        internal static PiShockPlugin Instance = null;
 
         internal ManualLogSource mls;
 
         // Define Config Entries
         internal ConfigEntry<string> PiShockUsername;
         internal ConfigEntry<string> PiShockAPIKey;
-        internal ConfigEntry<string> PiShockShockerCode;
+        internal ConfigEntry<string> PiShockShockerShareCode;
 
         internal ConfigEntry<bool> shockOnDeath;
         internal ConfigEntry<bool> shockOnDamage;
         internal ConfigEntry<bool> shockOnFired;
         internal ConfigEntry<bool> shockBasedOnHealth;
-        internal ConfigEntry<bool> vibrateOnly;
 
-        internal ConfigEntry<int> duration;
         internal ConfigEntry<int> maxIntensity;
         internal ConfigEntry<int> minIntensity;
-        internal ConfigEntry<int> durationDeath;
         internal ConfigEntry<int> intensityDeath;
-        internal ConfigEntry<int> durationFired;
         internal ConfigEntry<int> intensityFired;
 
+        internal ConfigEntry<int> duration;
+        internal ConfigEntry<int> durationDeath;
+        internal ConfigEntry<int> durationFired;
+
+        internal ConfigEntry<bool> testMode;
+        internal ConfigEntry<bool> vibrateOnly;
         internal ConfigEntry<bool> enableInterval;
         internal ConfigEntry<int> interval;
 
@@ -54,24 +57,25 @@ namespace PiShock
             mls.LogMessage("PiShock " + modVersion + " - by TRIPPYTRASH");
             
             // Bind config entries and info
-            PiShockUsername = Config.Bind("PiShock API Authentication", "PiShockUsername", "ZAP_xdx");
-            PiShockAPIKey = Config.Bind("PiShock API Authentication", "PiShockAPIKey", "ABCDEF-123456-GHIJKL-7890XZ");
-            PiShockShockerCode = Config.Bind("PiShock API Authentication", "PiShockShockerCode", "A1B2C3D4E5F6");
+            PiShockUsername = Config.Bind("PiShock API Authentication", "PiShockUsername", "");
+            PiShockAPIKey = Config.Bind("PiShock API Authentication", "PiShockAPIKey", "");
+            PiShockShockerShareCode = Config.Bind("PiShock API Authentication", "PiShockShockerCode", "", "The share code for your PiShock shocker");
 
             shockOnDamage = Config.Bind("Shocking Events", "shockOnDamage", true, "Get shocked when you take damage");
             shockOnDeath = Config.Bind("Shocking Events", "shockOnDeath", true, "Get shocked when you die");
             shockOnFired = Config.Bind("Shocking Events", "shockOnFired", true, "Get shocked when you do not reach the quota");
             shockBasedOnHealth = Config.Bind("Shocking Events", "shockBasedOnHealth", false, "Enable to calculate shock intensity based on remaining health instead of the damage taken (shockOnDeath must be enabled)");
 
-            maxIntensity = Config.Bind("Intensity Sliders", "maximum", 1, new ConfigDescription("Maximum intensity of shock/vibration", new AcceptableValueRange<int>(1, 100)));
             minIntensity = Config.Bind("Intensity Sliders", "minimum", 1, new ConfigDescription("Minimum intensity of shock/vibration", new AcceptableValueRange<int>(1, 100)));
+            maxIntensity = Config.Bind("Intensity Sliders", "maximum", 5, new ConfigDescription("Maximum intensity of shock/vibration", new AcceptableValueRange<int>(1, 100)));
             intensityDeath = Config.Bind("Intensity Sliders", "intensityDeath", 10, new ConfigDescription("Intensity of shock/vibration when you die", new AcceptableValueRange<int>(1, 100)));
             intensityFired = Config.Bind("Intensity Sliders", "intensityFired", 10, new ConfigDescription("Intensity of shock/vibration when you do not reach the quota", new AcceptableValueRange<int>(1, 100)));
 
             duration = Config.Bind("Durations Sliders", "duration", 1, new ConfigDescription("General duration of shock/vibration", new AcceptableValueRange<int>(1, 10)));
-            durationFired = Config.Bind("Durations Sliders", "durationFired", 3, new ConfigDescription("Duration of shock/vibration when you do not reach the quota", new AcceptableValueRange<int>(1, 10)));
             durationDeath = Config.Bind("Durations Sliders", "durationDeath", 1, new ConfigDescription("Duration of shock/vibration when you die", new AcceptableValueRange<int>(1, 10)));
+            durationFired = Config.Bind("Durations Sliders", "durationFired", 2, new ConfigDescription("Duration of shock/vibration when you do not reach the quota", new AcceptableValueRange<int>(1, 10)));
 
+            testMode = Config.Bind("Misc", "testMode", false, "Only beeps and a test beep upon launch");
             vibrateOnly = Config.Bind("Misc", "vibrateOnly", false, "Use vibration instead of shock");
             enableInterval = Config.Bind("Misc", "enableInterval", true, "Should there be a delay between shocks? (makes constant damage like bees bearable)");
             interval = Config.Bind("Misc", "damageInterval", 10, "Interval between damage shocks (enable interval must = true)");
@@ -80,7 +84,7 @@ namespace PiShock
 
             mls.LogMessage("Running for user: " + PiShockUsername.Value);
 
-            harmony.PatchAll(typeof(PiShock));
+            harmony.PatchAll(typeof(PiShockPlugin));
             harmony.PatchAll(typeof(PlayerControllerBPatch));
             harmony.PatchAll(typeof(StartOfRoundPatch));
 
@@ -88,14 +92,33 @@ namespace PiShock
             {
                 Instance = this;
             }
+            if (testMode.Value)
+            {
+                DoOperation(0, 1);
+            }
         }
-
+        public void OnSuccess(string operation, int intensity, int duration)
+        {
+            if (operation == "beep")
+            {
+                mls.LogMessage($"Sent {operation} to {PiShockUsername.Value} for {duration} second(s)");
+            }
+            else
+            {
+                mls.LogMessage($"Sent {operation} {intensity} to {PiShockUsername.Value} for {duration} second(s)");
+            }
+        }
+        public void OnError(object StatusCode, object ReasonPhrase, object responseContent)
+        {
+            mls.LogWarning($"Error: {StatusCode} = {ReasonPhrase}");
+            mls.LogWarning($"Response Content: {responseContent}");
+        }
         internal void DoDamage(int dmg, int health)
         {
             TimeSpan calculatedTime = DateTime.Now - lastShock;
             if (enableInterval.Value && calculatedTime < TimeSpan.FromSeconds(interval.Value))
             {
-                Logger.LogDebug("Didn't shick due to interval. LastShock; " + lastShock.ToLongTimeString());
+                Logger.LogDebug("Didn't shock due to interval. LastShock; " + lastShock.ToLongTimeString());
                 return;
             }
             int maxDmgShock = Mathf.Clamp(dmg, minIntensity.Value, maxIntensity.Value);
@@ -132,8 +155,12 @@ namespace PiShock
         internal void DoFired()
         {
             if (DidFired) return;
-            mls.LogInfo("Fired Shock");
-            DoOperation(intensityFired.Value, durationFired.Value);
+            Task.Run(async () =>
+            {
+                await Task.Delay(15000);
+                mls.LogInfo("Fired Shock");
+                DoOperation(intensityFired.Value, durationFired.Value);
+            });
             DidFired = true;
             Task.Run(async () =>
             {
@@ -148,14 +175,18 @@ namespace PiShock
             {
                 username = PiShockUsername.Value,
                 apiKey = PiShockAPIKey.Value,
-                code = PiShockShockerCode.Value,
+                code = PiShockShockerShareCode.Value,
                 senderName = pishockLogId
             };
 
-            if (vibrateOnly.Value)
+            if (testMode.Value)
+            {
+                await user.Beep(1);
+            }
+            else if (vibrateOnly.Value)
             {
                 await user.Vibrate(intensity, duration);
-                mls.LogDebug("Vibrating");
+                mls.LogDebug("VIB ONLY");
             }
             else
             {
@@ -175,7 +206,7 @@ namespace PiShock.Patches
         {
             if (__instance.IsOwner)
             {
-                PiShock.Instance.DoDeath();
+                PiShockPlugin.Instance.DoDeath();
             }
         }
 
@@ -183,7 +214,7 @@ namespace PiShock.Patches
         [HarmonyPostfix]
         private static void DamagePatch(int ___health, int damageNumber)
         {
-            PiShock.Instance.DoDamage(damageNumber, ___health);
+            PiShockPlugin.Instance.DoDamage(damageNumber, ___health);
         }
     }
     internal class StartOfRoundPatch
@@ -192,7 +223,7 @@ namespace PiShock.Patches
         [HarmonyPostfix]
         private static void FirePlayersAfterDeadlinePatch()
         {
-            PiShock.Instance.DoFired();
+            PiShockPlugin.Instance.DoFired();
         }
     }
 }

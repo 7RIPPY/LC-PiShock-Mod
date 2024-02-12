@@ -14,11 +14,10 @@ namespace PiShock
 
         private string apiEndpoint = "https://do.pishock.com/api/apioperate/";
 
-        public async Task Shock(int intensity, int duration)
+        public async Task SendHttp(int op, int intensity, int duration)
         {
             using (HttpClient client = new HttpClient())
             {
-                // Data request
                 var requestData = new
                 {
                     Username = username,
@@ -27,13 +26,38 @@ namespace PiShock
                     Intensity = intensity,
                     Duration = duration,
                     APIKey = apiKey,
-                    Op = 0
+                    Op = op
+                };
+                var requestDataBeep = new
+                {
+                    Username = username,
+                    Name = senderName,
+                    Code = code,
+                    Duration = duration,
+                    APIKey = apiKey,
+                    Op = op
                 };
 
-                // Serialize the request data to JSON
-                string jsonBody = Newtonsoft.Json.JsonConvert.SerializeObject(requestData);
+                string jsonBody = "";
+                string operation = "";
 
-                // Create StringContent with the correct content type
+                if (op == 0) //shock
+                {
+                    jsonBody = Newtonsoft.Json.JsonConvert.SerializeObject(requestData);
+                    operation = "shock";
+
+                }
+                else if (op == 1) // vib
+                {
+                    jsonBody = Newtonsoft.Json.JsonConvert.SerializeObject(requestData);
+                    operation = "vibrate";
+                }
+                else if (op == 2) // beep
+                {
+                    jsonBody = Newtonsoft.Json.JsonConvert.SerializeObject(requestDataBeep);
+                    operation = "beep";
+                }
+
                 using (HttpContent content = new StringContent(jsonBody, Encoding.UTF8, "application/json"))
                 {
                     // Send POST request
@@ -41,95 +65,33 @@ namespace PiShock
 
                     if (response.IsSuccessStatusCode)
                     {
-                        Console.WriteLine("Request sent successfully.");
+                        // Send Sucess back to Plugin.cs to handle logging
+                        PiShockPlugin.Instance.OnSuccess(operation, intensity, duration);
                     }
                     else
                     {
-                        Console.WriteLine($"Error: {response.StatusCode} - {response.ReasonPhrase}");
-
+                        // Send Error back to Plugin.cs to handle logging
                         string responseContent = await response.Content.ReadAsStringAsync();
-                        Console.WriteLine($"Response Content: {responseContent}");
+                        PiShockPlugin.Instance.OnError(response.StatusCode, response.ReasonPhrase, responseContent);
                     }
                 }
             }
+
+        }
+
+        public async Task Shock(int intensity, int duration)
+        {
+            await SendHttp(0, intensity, duration);
         }
 
         public async Task Vibrate(int intensity, int duration)
         {
-            using (HttpClient client = new HttpClient())
-            {
-                // Request data
-                var requestData = new
-                {
-                    Username = username,
-                    Name = senderName,
-                    Code = code,
-                    Intensity = intensity,
-                    Duration = duration,
-                    APIKey = apiKey,
-                    Op = 0
-                };
-
-                // Serializze request data to JSON
-                string jsonBody = Newtonsoft.Json.JsonConvert.SerializeObject(requestData);
-
-                // Create StringContent with the correct content type
-                using (HttpContent content = new StringContent(jsonBody, Encoding.UTF8, "application/json"))
-                {
-                    // Send POST request
-                    HttpResponseMessage response = await client.PostAsync(apiEndpoint, content);
-
-                    if (response.IsSuccessStatusCode)
-                    {
-                        Console.WriteLine("Request sent successfully.");
-                    }
-                    else
-                    {
-                        Console.WriteLine($"Error: {response.StatusCode} = {response.ReasonPhrase}");
-
-                        string responseContent = await response.Content.ReadAsStringAsync();
-                        Console.WriteLine($"Response Content: {responseContent}");
-                    }
-                }
-            }
+            await SendHttp(1, intensity, duration);
         }
 
         public async Task Beep(int duration)
         {
-            using (HttpClient client = new HttpClient())
-            {
-                var requestData = new
-                {
-                    // Request data
-                    Username = username,
-                    Name = senderName,
-                    Code = code,
-                    Intensity = duration,
-                    APIKey = apiKey,
-                    Op = 0
-                };
-
-                // Serialize request data to JSON
-                string jsonBody = Newtonsoft.Json.JsonConvert.SerializeObject(requestData);
-
-                // Create StringContent with the correct content type
-                using (HttpContent content = new StringContent(jsonBody, Encoding.UTF8, "application/json"))
-                {
-                    HttpResponseMessage response = await client.PostAsync(apiEndpoint, content);
-
-                    if (response.IsSuccessStatusCode)
-                    {
-                        Console.WriteLine("Request sent successfully");
-                    }
-                    else
-                    {
-                        Console.WriteLine($"Error: {response.StatusCode} = {response.ReasonPhrase}");
-
-                        string responseContent = await response.Content.ReadAsStringAsync();
-                        Console.WriteLine($"Response Content: {responseContent}");
-                    }
-                }
-            }
+            await SendHttp(2, 0, duration);
         }
     }
 }
